@@ -36,6 +36,7 @@ BASE_PROVIDERS = {
     "OpenAI": ["gpt-4o-mini", "gpt-3.5-turbo", "gpt-4o"],
     "Anthropic": ["claude-3-haiku", "claude-3-sonnet", "claude-3-opus"],
     "DeepSeek": ["deepseek-chat", "deepseek-coder"],
+    "Kluster": ["klusterai/Meta-Llama-3.3-70B-Instruct-Turbo", "kluster-2", "kluster-pro"],  # Added Kluster provider with placeholder models
 }
 
 # Initialize AI_PROVIDERS with base providers
@@ -228,6 +229,33 @@ def get_ollama_response(messages, model):
     except Exception as e:
         return f"⚠️ Error: {str(e)}", True
 
+# Function to get response from Kluster AI
+def get_kluster_response(messages, model):
+    try:
+        headers = {
+            "Content-Type": "application/json",
+            "Authorization": f"Bearer {os.getenv('KLUSTER_API_KEY')}"
+        }
+        
+        data = {
+            "model": model,
+            "messages": messages,
+            "max_tokens": 1000
+        }
+        
+        response = requests.post(
+            "https://api.kluster.ai/v1/chat/completions",
+            headers=headers,
+            json=data
+        )
+        
+        if response.status_code == 200:
+            return response.json()["choices"][0]["message"]["content"], False
+        else:
+            return f"⚠️ Error: {response.text}", True
+    except Exception as e:
+        return f"⚠️ Error: {str(e)}", True
+
 # Function to route to the correct AI provider
 def get_response_from_llm(messages, provider=None, model=None):
     provider = provider or st.session_state.ai_provider
@@ -241,6 +269,8 @@ def get_response_from_llm(messages, provider=None, model=None):
         return get_deepseek_response(messages, model)
     elif provider == "Ollama":
         return get_ollama_response(messages, model)
+    elif provider == "Kluster":
+        return get_kluster_response(messages, model)
     else:
         return "⚠️ Unknown AI provider selected.", True
 
