@@ -63,12 +63,7 @@ Feel free to submit pull requests or report issues to improve the project!
 ## 🎥 Screen Record
 Watch a quick screen recording of the chatbot in action:
 
-<video autoplay controls width="100%">
-    <source src="Screenshots/video.webm" type="video/webm">
-    Your browser does not support the video tag.
-</video>
-
-Click the play button above to view the demo directly.
+<img width="960" alt="gif" src="Screenshots/gif.gif">
 
 ## Screenshorts
 1. Home Page
