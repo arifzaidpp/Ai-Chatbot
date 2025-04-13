@@ -13,44 +13,55 @@ openai_client = OpenAI()
 
 st.set_page_config(page_title="Dubai Trip Assistant", page_icon="🧞", layout="wide")
 
+# Initialize session state for Ollama URL
+if "ollama_url" not in st.session_state:
+    st.session_state.ollama_url = "http://localhost:11434"
+
 # Fetch available Ollama models
 def get_ollama_models():
     try:
         response = requests.get(f"{st.session_state.ollama_url}/api/tags")
         if response.status_code == 200:
             models = [model["name"] for model in response.json()["models"]]
-            return models if models else ["no-models-found"]
-        else:
-            return ["ollama-connection-error"]
+            if models:
+                return models
+        return ["no-models-found"]
     except Exception:
         return ["ollama-connection-error"]
 
-# Initialize session state for Ollama URL
-if "ollama_url" not in st.session_state:
-    st.session_state.ollama_url = "http://localhost:11434"
-
-# AI provider options
-AI_PROVIDERS = {
+# Base AI provider options (without Ollama models)
+BASE_PROVIDERS = {
     "OpenAI": ["gpt-4o-mini", "gpt-3.5-turbo", "gpt-4o"],
     "Anthropic": ["claude-3-haiku", "claude-3-sonnet", "claude-3-opus"],
     "DeepSeek": ["deepseek-chat", "deepseek-coder"],
 }
 
-# Initial configuration for session state
+# Initialize AI_PROVIDERS with base providers
+if "ai_providers" not in st.session_state:
+    st.session_state.ai_providers = BASE_PROVIDERS.copy()
+    # Add Ollama with placeholder until we fetch models
+    st.session_state.ai_providers["Ollama"] = ["fetching-models..."]
+
+# Initial configuration for other session state variables
 if "ai_provider" not in st.session_state:
     st.session_state.ai_provider = "OpenAI"
 if "ai_model" not in st.session_state:
     st.session_state.ai_model = "gpt-4o-mini"
-if "ollama_models_fetched" not in st.session_state:
-    st.session_state.ollama_models_fetched = False
 if "error_shown" not in st.session_state:
     st.session_state.error_shown = False
 
-# Update AI_PROVIDERS with Ollama models
-if not st.session_state.ollama_models_fetched:
+# Function to refresh Ollama models
+def refresh_ollama_models():
     ollama_models = get_ollama_models()
-    AI_PROVIDERS["Ollama"] = ollama_models
-    st.session_state.ollama_models_fetched = True
+    # Update the Ollama models in our providers dictionary
+    st.session_state.ai_providers["Ollama"] = ollama_models
+    
+    # If the current provider is Ollama and model is not available, select the first one
+    if st.session_state.ai_provider == "Ollama" and st.session_state.ai_model not in ollama_models:
+        st.session_state.ai_model = ollama_models[0]
+
+# Refresh Ollama models at startup
+refresh_ollama_models()
 
 initial_message = [
     {"role": "system", "content": "You are a trip planner in Dubai. You're an expert in Dubai Tourism Locations, Food, Events, Hotels, etc. You are able to guide users to plan their vacation to Dubai. You should respond professionally. Your name is Dubai Genei, short name is DG. Response shouldn't exceed 200 words. Always ask questions to users and help them plan a trip. Finally give a day-wise itinerary. Deal with users professionally."},
@@ -81,6 +92,8 @@ def get_anthropic_response(messages, model):
     try:
         # Convert messages to Anthropic format
         formatted_messages = []
+        system_content = ""
+        
         for msg in messages:
             if msg["role"] == "system":
                 system_content = msg["content"]
@@ -176,9 +189,6 @@ def get_response_from_llm(messages, provider=None, model=None):
     provider = provider or st.session_state.ai_provider
     model = model or st.session_state.ai_model
     
-    # Remove system message for display but keep it for API calls
-    display_messages = [m for m in messages if m["role"] != "system"]
-    
     if provider == "OpenAI":
         return get_openai_response(messages, model)
     elif provider == "Anthropic":
@@ -190,17 +200,6 @@ def get_response_from_llm(messages, provider=None, model=None):
     else:
         return "⚠️ Unknown AI provider selected.", True
 
-# Function to refresh Ollama models
-def refresh_ollama_models():
-    st.session_state.ollama_models_fetched = False
-    ollama_models = get_ollama_models()
-    AI_PROVIDERS["Ollama"] = ollama_models
-    st.session_state.ollama_models_fetched = True
-    
-    # If the current model is not in the refreshed list, select the first available
-    if st.session_state.ai_provider == "Ollama" and st.session_state.ai_model not in ollama_models:
-        st.session_state.ai_model = ollama_models[0]
-
 # UI layout
 st.title("Dubai Trip Assistant")
 
@@ -211,20 +210,21 @@ with st.sidebar:
     # AI provider selection
     new_provider = st.selectbox(
         "Select AI Provider",
-        options=list(AI_PROVIDERS.keys()),
-        index=list(AI_PROVIDERS.keys()).index(st.session_state.ai_provider)
+        options=list(st.session_state.ai_providers.keys()),
+        index=list(st.session_state.ai_providers.keys()).index(st.session_state.ai_provider)
     )
     
     # Update models if provider changed
     if new_provider != st.session_state.ai_provider:
         st.session_state.ai_provider = new_provider
-        if new_provider == "Ollama" and "ollama-connection-error" in AI_PROVIDERS["Ollama"]:
-            # Try to refresh Ollama models when switching to Ollama
+        # If switching to Ollama, refresh models
+        if new_provider == "Ollama":
             refresh_ollama_models()
-        st.session_state.ai_model = AI_PROVIDERS[new_provider][0]
+        # Set default model for the new provider
+        st.session_state.ai_model = st.session_state.ai_providers[new_provider][0]
     
     # Model selection based on provider
-    available_models = AI_PROVIDERS[st.session_state.ai_provider]
+    available_models = st.session_state.ai_providers[st.session_state.ai_provider]
     model_index = 0
     if st.session_state.ai_model in available_models:
         model_index = available_models.index(st.session_state.ai_model)
@@ -244,7 +244,7 @@ with st.sidebar:
                 value=st.session_state.ollama_url
             )
         with col2:
-            refresh_button = st.button("Refresh Models")
+            refresh_button = st.button("Refresh")
             
         if new_ollama_url != st.session_state.ollama_url:
             st.session_state.ollama_url = new_ollama_url
@@ -254,10 +254,18 @@ with st.sidebar:
             refresh_ollama_models()
             st.success("Models refreshed!")
             
-        if "ollama-connection-error" in AI_PROVIDERS["Ollama"]:
+        # Show appropriate warnings for Ollama
+        ollama_models = st.session_state.ai_providers["Ollama"]
+        if "ollama-connection-error" in ollama_models:
             st.error("⚠️ Cannot connect to Ollama server. Check if Ollama is running.")
-        elif "no-models-found" in AI_PROVIDERS["Ollama"]:
-            st.warning("⚠️ No models found in Ollama. Please install models with 'ollama pull model_name'.")
+        elif "no-models-found" in ollama_models:
+            st.warning("""
+            ⚠️ No models found in Ollama. 
+            
+            Install models with: `ollama pull modelname`
+            
+            Example models: llama3, mistral, gemma, phi3
+            """)
     
     # Reset conversation button
     if st.button("Reset Conversation"):
