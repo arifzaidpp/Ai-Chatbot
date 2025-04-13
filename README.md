@@ -20,13 +20,15 @@ AI Dubai Travel Planner Chatbot is an AI-powered chatbot that helps travelers pl
 ### **1. Clone the Repository**
 ```sh
 git clone https://github.com/
-cd AI-Dubai-Travel-Planner-Chatbot
+cd AI-Chatbot
 ```
 
-### **2. Install Dependencies**
+### **2. Install Dependencies in **
 Ensure you have Python and the required libraries installed.
 ```sh
-pip install -r requirements.txt
+pip install dotenv
+pit install openai
+pip install streamlit
 ```
 
 ### **3. Set Up Environment Variables**
@@ -44,11 +46,11 @@ Getting OpenAI API Key
 
 ### **4. Run the Application**
 ```sh
-python app.py
+streamlit run chatbot.py
 ```
 
 ### **5. Access the Chatbot**
-Open `http://127.0.0.1:5000/` in your browser to start using the chatbot.
+Open `http://localhost:8501/` in your browser to start using the chatbot.
 
 ## 📖 Usage
 - Enter your travel details (dates, preferences, budget).
