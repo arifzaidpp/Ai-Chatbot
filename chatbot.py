@@ -1,6 +1,7 @@
 from dotenv import load_dotenv
 from openai import OpenAI
 import streamlit as st
+from openai import RateLimitError
 
 load_dotenv()  # take environment variables from .env.
 
@@ -15,12 +16,15 @@ initial_message = [
 ]
 
 def get_response_from_llm(messages):
-    completion = client.chat.completions.create(
-        model="gpt-4o-mini",
-        messages=messages 
-    )
+    try:
+        completion = client.chat.completions.create(
+            model="gpt-4o-mini",
+            messages=messages
+        )
+        return completion.choices[0].message.content
+    except RateLimitError as e:
+        return "⚠️ Rate limit hit or insufficient quota. Please check your OpenAI account."
 
-    return completion.choices[0].message.content
 
 if "messages" not in st.session_state:
     st.session_state.messages = initial_message
