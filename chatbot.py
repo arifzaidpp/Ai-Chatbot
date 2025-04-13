@@ -6,6 +6,7 @@ from openai import RateLimitError
 import requests
 import json
 import re
+import uuid
 
 load_dotenv()  # take environment variables from .env
 
@@ -52,6 +53,8 @@ if "error_shown" not in st.session_state:
     st.session_state.error_shown = False
 if "show_thinking" not in st.session_state:
     st.session_state.show_thinking = True
+if "expanded_thinking" not in st.session_state:
+    st.session_state.expanded_thinking = {}
 
 # Updated system prompt to include thinking instruction
 system_prompt = """You are a trip planner in Dubai. You're an expert in Dubai Tourism Locations, Food, Events, Hotels, etc. 
@@ -70,6 +73,13 @@ like Dubai Parks and Resorts, Atlantis Aquaventure, and the Dubai Aquarium. I'll
 
 Your final response should follow after your thinking process.
 """
+
+# Toggle thinking section expansion
+def toggle_thinking(thinking_id):
+    if thinking_id in st.session_state.expanded_thinking:
+        st.session_state.expanded_thinking[thinking_id] = not st.session_state.expanded_thinking[thinking_id]
+    else:
+        st.session_state.expanded_thinking[thinking_id] = True
 
 # Function to refresh Ollama models
 def refresh_ollama_models():
@@ -234,22 +244,58 @@ def get_response_from_llm(messages, provider=None, model=None):
     else:
         return "⚠️ Unknown AI provider selected.", True
 
-# Set custom CSS for the thinking section
+# Set custom CSS for the thinking section with collapsible functionality
 st.markdown("""
 <style>
     .thinking-box {
-        background-color: #f0f7ff;
-        border-left: 5px solid #1e88e5;
+        background-color: #1E1E1E;
+        color: #D4D4D4;
+        border: 1px solid #333333;
         padding: 10px 15px;
         margin-bottom: 10px;
         border-radius: 5px;
+        font-family: 'Courier New', monospace;
     }
     .thinking-header {
-        color: #1e88e5;
+        color: #D4D4D4;
         font-weight: bold;
         margin-bottom: 5px;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        cursor: pointer;
+    }
+    .thinking-content {
+        margin-top: 8px;
+        white-space: pre-wrap;
+    }
+    .thinking-arrow {
+        font-size: 1.2em;
+    }
+    .thinking-collapsed .thinking-content {
+        display: none;
+    }
+    .thinking-header:hover {
+        color: #ffffff;
     }
 </style>
+""", unsafe_allow_html=True)
+
+# JavaScript for collapsible thinking sections
+st.markdown("""
+<script>
+function toggleThinking(id) {
+    const thinkingBox = document.getElementById('thinking-' + id);
+    thinkingBox.classList.toggle('thinking-collapsed');
+    
+    const arrow = document.getElementById('arrow-' + id);
+    if (thinkingBox.classList.contains('thinking-collapsed')) {
+        arrow.innerHTML = '▼';
+    } else {
+        arrow.innerHTML = '▲';
+    }
+}
+</script>
 """, unsafe_allow_html=True)
 
 # UI layout
@@ -327,6 +373,7 @@ with st.sidebar:
     if st.button("Reset Conversation"):
         st.session_state.messages = initial_message
         st.session_state.error_shown = False
+        st.session_state.expanded_thinking = {}
         st.rerun()
 
     st.markdown("---")
@@ -346,16 +393,36 @@ with chat_container:
             if message["role"] == "assistant" and "<think>" in message["content"] and "</think>" in message["content"]:
                 thinking, response = parse_thinking(message["content"])
                 
+                # Generate a unique ID for this thinking section if not already present
+                if "id" not in message:
+                    message["id"] = str(uuid.uuid4())
+                thinking_id = message["id"]
+                
+                # Initialize expanded state for this thinking section if not present
+                if thinking_id not in st.session_state.expanded_thinking:
+                    st.session_state.expanded_thinking[thinking_id] = False
+                
                 # Display in chat
                 with st.chat_message("assistant"):
                     # Show thinking process if enabled
                     if thinking and st.session_state.show_thinking:
-                        st.markdown(f"""
-                        <div class="thinking-box">
-                            <div class="thinking-header">🧠 AI Thinking Process:</div>
-                            {thinking}
-                        </div>
-                        """, unsafe_allow_html=True)
+                        is_expanded = st.session_state.expanded_thinking[thinking_id]
+                        
+                        # Create collapsible container
+                        container = st.container()
+                        with container:
+                            # Thinking header with toggle button
+                            col1, col2 = st.columns([20, 1])
+                            with col1:
+                                st.markdown("🧠 **AI Thinking Process**")
+                            with col2:
+                                if st.button("▼" if is_expanded else "▲", key=f"toggle_{thinking_id}"):
+                                    st.session_state.expanded_thinking[thinking_id] = not is_expanded
+                                    st.rerun()
+                            
+                            # Thinking content
+                            if is_expanded:
+                                st.code(thinking, language=None)
                     
                     # Show final response
                     st.markdown(response)
@@ -385,27 +452,40 @@ if user_message:
     
     # Only add assistant response to messages if not an error or if error not shown yet
     if not is_error or not st.session_state.error_shown:
+        # Parse thinking and response
+        thinking, final_response = parse_thinking(response)
+        
+        # Generate unique ID for this thinking section
+        thinking_id = str(uuid.uuid4())
+        
         response_message = {
             "role": "assistant",
-            "content": response
+            "content": response,
+            "id": thinking_id
         }
+        
+        # Initialize expanded state for this thinking section
+        if thinking:
+            st.session_state.expanded_thinking[thinking_id] = False
         
         # Only append to messages if not an error
         if not is_error:
             st.session_state.messages.append(response_message)
             
-            # Parse and display thinking and response
-            thinking, final_response = parse_thinking(response)
-            
             with st.chat_message("assistant"):
                 # Show thinking process if available and enabled
                 if thinking and st.session_state.show_thinking:
-                    st.markdown(f"""
-                    <div class="thinking-box">
-                        <div class="thinking-header">🧠 AI Thinking Process:</div>
-                        {thinking}
-                    </div>
-                    """, unsafe_allow_html=True)
+                    # Create collapsible container
+                    container = st.container()
+                    with container:
+                        # Thinking header with toggle button
+                        col1, col2 = st.columns([20, 1])
+                        with col1:
+                            st.markdown("🧠 **AI Thinking Process**")
+                        with col2:
+                            if st.button("▼", key=f"toggle_{thinking_id}"):
+                                st.session_state.expanded_thinking[thinking_id] = True
+                                st.rerun()
                 
                 # Show final response
                 st.markdown(final_response)
