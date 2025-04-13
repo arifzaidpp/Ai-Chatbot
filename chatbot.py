@@ -13,12 +13,27 @@ openai_client = OpenAI()
 
 st.set_page_config(page_title="Dubai Trip Assistant", page_icon="🧞", layout="wide")
 
+# Fetch available Ollama models
+def get_ollama_models():
+    try:
+        response = requests.get(f"{st.session_state.ollama_url}/api/tags")
+        if response.status_code == 200:
+            models = [model["name"] for model in response.json()["models"]]
+            return models if models else ["no-models-found"]
+        else:
+            return ["ollama-connection-error"]
+    except Exception:
+        return ["ollama-connection-error"]
+
+# Initialize session state for Ollama URL
+if "ollama_url" not in st.session_state:
+    st.session_state.ollama_url = "http://localhost:11434"
+
 # AI provider options
 AI_PROVIDERS = {
     "OpenAI": ["gpt-4o-mini", "gpt-3.5-turbo", "gpt-4o"],
     "Anthropic": ["claude-3-haiku", "claude-3-sonnet", "claude-3-opus"],
     "DeepSeek": ["deepseek-chat", "deepseek-coder"],
-    "Ollama": ["llama3", "mistral", "gemma", "phi3", "codellama", "orca-mini"]
 }
 
 # Initial configuration for session state
@@ -26,8 +41,16 @@ if "ai_provider" not in st.session_state:
     st.session_state.ai_provider = "OpenAI"
 if "ai_model" not in st.session_state:
     st.session_state.ai_model = "gpt-4o-mini"
-if "ollama_url" not in st.session_state:
-    st.session_state.ollama_url = "http://localhost:11434"
+if "ollama_models_fetched" not in st.session_state:
+    st.session_state.ollama_models_fetched = False
+if "error_shown" not in st.session_state:
+    st.session_state.error_shown = False
+
+# Update AI_PROVIDERS with Ollama models
+if not st.session_state.ollama_models_fetched:
+    ollama_models = get_ollama_models()
+    AI_PROVIDERS["Ollama"] = ollama_models
+    st.session_state.ollama_models_fetched = True
 
 initial_message = [
     {"role": "system", "content": "You are a trip planner in Dubai. You're an expert in Dubai Tourism Locations, Food, Events, Hotels, etc. You are able to guide users to plan their vacation to Dubai. You should respond professionally. Your name is Dubai Genei, short name is DG. Response shouldn't exceed 200 words. Always ask questions to users and help them plan a trip. Finally give a day-wise itinerary. Deal with users professionally."},
@@ -47,11 +70,11 @@ def get_openai_response(messages, model):
             model=model,
             messages=messages
         )
-        return completion.choices[0].message.content
+        return completion.choices[0].message.content, False
     except RateLimitError:
-        return "⚠️ Rate limit hit or insufficient quota. Please check your OpenAI account."
+        return "⚠️ Rate limit hit or insufficient quota. Please check your OpenAI account.", True
     except Exception as e:
-        return f"⚠️ Error: {str(e)}"
+        return f"⚠️ Error: {str(e)}", True
 
 # Function to get response from Anthropic
 def get_anthropic_response(messages, model):
@@ -83,11 +106,11 @@ def get_anthropic_response(messages, model):
         )
         
         if response.status_code == 200:
-            return response.json()["content"][0]["text"]
+            return response.json()["content"][0]["text"], False
         else:
-            return f"⚠️ Error: {response.text}"
+            return f"⚠️ Error: {response.text}", True
     except Exception as e:
-        return f"⚠️ Error: {str(e)}"
+        return f"⚠️ Error: {str(e)}", True
 
 # Function to get response from DeepSeek
 def get_deepseek_response(messages, model):
@@ -110,11 +133,11 @@ def get_deepseek_response(messages, model):
         )
         
         if response.status_code == 200:
-            return response.json()["choices"][0]["message"]["content"]
+            return response.json()["choices"][0]["message"]["content"], False
         else:
-            return f"⚠️ Error: {response.text}"
+            return f"⚠️ Error: {response.text}", True
     except Exception as e:
-        return f"⚠️ Error: {str(e)}"
+        return f"⚠️ Error: {str(e)}", True
 
 # Function to get response from Ollama
 def get_ollama_response(messages, model):
@@ -142,11 +165,11 @@ def get_ollama_response(messages, model):
         )
         
         if response.status_code == 200:
-            return response.json()["message"]["content"]
+            return response.json()["message"]["content"], False
         else:
-            return f"⚠️ Error connecting to Ollama: {response.text}"
+            return f"⚠️ Error connecting to Ollama: {response.text}", True
     except Exception as e:
-        return f"⚠️ Error: {str(e)}"
+        return f"⚠️ Error: {str(e)}", True
 
 # Function to route to the correct AI provider
 def get_response_from_llm(messages, provider=None, model=None):
@@ -165,7 +188,18 @@ def get_response_from_llm(messages, provider=None, model=None):
     elif provider == "Ollama":
         return get_ollama_response(messages, model)
     else:
-        return "⚠️ Unknown AI provider selected."
+        return "⚠️ Unknown AI provider selected.", True
+
+# Function to refresh Ollama models
+def refresh_ollama_models():
+    st.session_state.ollama_models_fetched = False
+    ollama_models = get_ollama_models()
+    AI_PROVIDERS["Ollama"] = ollama_models
+    st.session_state.ollama_models_fetched = True
+    
+    # If the current model is not in the refreshed list, select the first available
+    if st.session_state.ai_provider == "Ollama" and st.session_state.ai_model not in ollama_models:
+        st.session_state.ai_model = ollama_models[0]
 
 # UI layout
 st.title("Dubai Trip Assistant")
@@ -184,27 +218,51 @@ with st.sidebar:
     # Update models if provider changed
     if new_provider != st.session_state.ai_provider:
         st.session_state.ai_provider = new_provider
+        if new_provider == "Ollama" and "ollama-connection-error" in AI_PROVIDERS["Ollama"]:
+            # Try to refresh Ollama models when switching to Ollama
+            refresh_ollama_models()
         st.session_state.ai_model = AI_PROVIDERS[new_provider][0]
     
     # Model selection based on provider
+    available_models = AI_PROVIDERS[st.session_state.ai_provider]
+    model_index = 0
+    if st.session_state.ai_model in available_models:
+        model_index = available_models.index(st.session_state.ai_model)
+    
     st.session_state.ai_model = st.selectbox(
         "Select Model",
-        options=AI_PROVIDERS[st.session_state.ai_provider],
-        index=AI_PROVIDERS[st.session_state.ai_provider].index(st.session_state.ai_model) 
-        if st.session_state.ai_model in AI_PROVIDERS[st.session_state.ai_provider] 
-        else 0
+        options=available_models,
+        index=model_index
     )
     
-    # Ollama settings if selected
+    # Ollama specific settings
     if st.session_state.ai_provider == "Ollama":
-        st.session_state.ollama_url = st.text_input(
-            "Ollama Server URL", 
-            value=st.session_state.ollama_url
-        )
+        col1, col2 = st.columns([3, 1])
+        with col1:
+            new_ollama_url = st.text_input(
+                "Ollama Server URL", 
+                value=st.session_state.ollama_url
+            )
+        with col2:
+            refresh_button = st.button("Refresh Models")
+            
+        if new_ollama_url != st.session_state.ollama_url:
+            st.session_state.ollama_url = new_ollama_url
+            refresh_ollama_models()
+            
+        if refresh_button:
+            refresh_ollama_models()
+            st.success("Models refreshed!")
+            
+        if "ollama-connection-error" in AI_PROVIDERS["Ollama"]:
+            st.error("⚠️ Cannot connect to Ollama server. Check if Ollama is running.")
+        elif "no-models-found" in AI_PROVIDERS["Ollama"]:
+            st.warning("⚠️ No models found in Ollama. Please install models with 'ollama pull model_name'.")
     
     # Reset conversation button
     if st.button("Reset Conversation"):
         st.session_state.messages = initial_message
+        st.session_state.error_shown = False
         st.rerun()
 
     st.markdown("---")
@@ -226,6 +284,9 @@ with chat_container:
 # User input
 user_message = st.chat_input("Type your message here...")
 if user_message:
+    # Reset error shown flag when user sends a new message
+    st.session_state.error_shown = False
+    
     new_message = {
         "role": "user",
         "content": user_message
@@ -235,15 +296,22 @@ if user_message:
     with st.chat_message("user"):
         st.markdown(user_message)
     
-    with st.chat_message("assistant"):
-        with st.spinner("Dubai Genei is thinking..."):
-            response = get_response_from_llm(st.session_state.messages)
+    # Get response from selected AI provider
+    with st.spinner("Dubai Genei is thinking..."):
+        response, is_error = get_response_from_llm(st.session_state.messages)
     
-    if response:
+    # Only add assistant response to messages if not an error or if error not shown yet
+    if not is_error or not st.session_state.error_shown:
         response_message = {
             "role": "assistant",
             "content": response
         }
-        st.session_state.messages.append(response_message)
+        
+        # Only append to messages if not an error
+        if not is_error:
+            st.session_state.messages.append(response_message)
+        else:
+            st.session_state.error_shown = True
+            
         with st.chat_message("assistant"):
             st.markdown(response)
