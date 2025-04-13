@@ -5,6 +5,7 @@ from openai import OpenAI
 from openai import RateLimitError
 import requests
 import json
+import re
 
 load_dotenv()  # take environment variables from .env
 
@@ -49,6 +50,26 @@ if "ai_model" not in st.session_state:
     st.session_state.ai_model = "gpt-4o-mini"
 if "error_shown" not in st.session_state:
     st.session_state.error_shown = False
+if "show_thinking" not in st.session_state:
+    st.session_state.show_thinking = True
+
+# Updated system prompt to include thinking instruction
+system_prompt = """You are a trip planner in Dubai. You're an expert in Dubai Tourism Locations, Food, Events, Hotels, etc. 
+You are able to guide users to plan their vacation to Dubai. You should respond professionally. 
+Your name is Dubai Genei, short name is DG. Response shouldn't exceed 200 words. 
+Always ask questions to users and help them plan a trip. Finally give a day-wise itinerary. Deal with users professionally.
+
+IMPORTANT: When you need to think through a response, especially for complex questions about Dubai attractions, 
+hotel recommendations, or creating itineraries, place your thought process between <think> and </think> tags.
+This helps the user understand your reasoning. For example:
+
+<think>
+This user is looking for a 3-day itinerary focused on family activities. Dubai has several family-friendly attractions 
+like Dubai Parks and Resorts, Atlantis Aquaventure, and the Dubai Aquarium. I'll organize these by location to minimize travel time.
+</think>
+
+Your final response should follow after your thinking process.
+"""
 
 # Function to refresh Ollama models
 def refresh_ollama_models():
@@ -64,7 +85,7 @@ def refresh_ollama_models():
 refresh_ollama_models()
 
 initial_message = [
-    {"role": "system", "content": "You are a trip planner in Dubai. You're an expert in Dubai Tourism Locations, Food, Events, Hotels, etc. You are able to guide users to plan their vacation to Dubai. You should respond professionally. Your name is Dubai Genei, short name is DG. Response shouldn't exceed 200 words. Always ask questions to users and help them plan a trip. Finally give a day-wise itinerary. Deal with users professionally."},
+    {"role": "system", "content": system_prompt},
     {
         "role": "assistant",
         "content": "Hello, I am Dubai Genei, your Expert Trip Planner. How can I help you plan your Dubai adventure?"
@@ -73,6 +94,19 @@ initial_message = [
 
 if "messages" not in st.session_state:
     st.session_state.messages = initial_message
+
+# Function to parse thinking and response
+def parse_thinking(response):
+    think_pattern = r'<think>(.*?)</think>'
+    think_match = re.search(think_pattern, response, re.DOTALL)
+    
+    if think_match:
+        thinking = think_match.group(1).strip()
+        # Remove the thinking part from the response
+        final_response = re.sub(think_pattern, '', response, flags=re.DOTALL).strip()
+        return thinking, final_response
+    else:
+        return None, response
 
 # Function to get response from OpenAI
 def get_openai_response(messages, model):
@@ -200,6 +234,24 @@ def get_response_from_llm(messages, provider=None, model=None):
     else:
         return "⚠️ Unknown AI provider selected.", True
 
+# Set custom CSS for the thinking section
+st.markdown("""
+<style>
+    .thinking-box {
+        background-color: #f0f7ff;
+        border-left: 5px solid #1e88e5;
+        padding: 10px 15px;
+        margin-bottom: 10px;
+        border-radius: 5px;
+    }
+    .thinking-header {
+        color: #1e88e5;
+        font-weight: bold;
+        margin-bottom: 5px;
+    }
+</style>
+""", unsafe_allow_html=True)
+
 # UI layout
 st.title("Dubai Trip Assistant")
 
@@ -267,6 +319,10 @@ with st.sidebar:
             Example models: llama3, mistral, gemma, phi3
             """)
     
+    # Display options
+    st.header("Display Settings")
+    st.session_state.show_thinking = st.checkbox("Show AI Thinking Process", value=st.session_state.show_thinking)
+    
     # Reset conversation button
     if st.button("Reset Conversation"):
         st.session_state.messages = initial_message
@@ -286,8 +342,27 @@ chat_container = st.container()
 with chat_container:
     for message in st.session_state.messages:
         if message["role"] != "system":
-            with st.chat_message(message["role"]):
-                st.markdown(message["content"])
+            # Check if this message has thinking content
+            if message["role"] == "assistant" and "<think>" in message["content"] and "</think>" in message["content"]:
+                thinking, response = parse_thinking(message["content"])
+                
+                # Display in chat
+                with st.chat_message("assistant"):
+                    # Show thinking process if enabled
+                    if thinking and st.session_state.show_thinking:
+                        st.markdown(f"""
+                        <div class="thinking-box">
+                            <div class="thinking-header">🧠 AI Thinking Process:</div>
+                            {thinking}
+                        </div>
+                        """, unsafe_allow_html=True)
+                    
+                    # Show final response
+                    st.markdown(response)
+            else:
+                # Regular message display
+                with st.chat_message(message["role"]):
+                    st.markdown(message["content"])
 
 # User input
 user_message = st.chat_input("Type your message here...")
@@ -318,8 +393,23 @@ if user_message:
         # Only append to messages if not an error
         if not is_error:
             st.session_state.messages.append(response_message)
+            
+            # Parse and display thinking and response
+            thinking, final_response = parse_thinking(response)
+            
+            with st.chat_message("assistant"):
+                # Show thinking process if available and enabled
+                if thinking and st.session_state.show_thinking:
+                    st.markdown(f"""
+                    <div class="thinking-box">
+                        <div class="thinking-header">🧠 AI Thinking Process:</div>
+                        {thinking}
+                    </div>
+                    """, unsafe_allow_html=True)
+                
+                # Show final response
+                st.markdown(final_response)
         else:
             st.session_state.error_shown = True
-            
-        with st.chat_message("assistant"):
-            st.markdown(response)
+            with st.chat_message("assistant"):
+                st.markdown(response)
