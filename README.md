@@ -78,5 +78,6 @@ Click the play button above to view the demo directly.
 <img width="960" alt="image" src="Screenshots/3.png">
 <img width="960" alt="image" src="Screenshots/4.png">
 <img width="960" alt="image" src="Screenshots/5.png">
+<img width="960" alt="image" src="Screenshots/6.png">
 
 
