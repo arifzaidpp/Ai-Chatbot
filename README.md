@@ -19,8 +19,8 @@ AI Dubai Travel Planner Chatbot is an AI-powered chatbot that helps travelers pl
 ## 🛠️ Setup Instructions
 ### **1. Clone the Repository**
 ```sh
-git clone https://github.com/
-cd AI-Chatbot
+git clone https://github.com/arifzaidpp/Ai-Chatbot.git
+cd Ai-Chatbot
 ```
 
 ### **2. Install Dependencies in **
