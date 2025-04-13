@@ -11,7 +11,7 @@ AI Dubai Travel Planner Chatbot is an AI-powered chatbot that helps travelers pl
 
 ### **Prerequisites**
 - Python 3.x installed
-- OpenAI API Key (for chatbot functionality)
+- API Keys (for chatbot functionality) or Ollama
 - LLM
 - Streamlit
 - Required dependencies installed
@@ -32,9 +32,12 @@ pip install streamlit
 ```
 
 ### **3. Set Up Environment Variables**
-Create a `.env` file and add your OpenAI API Key and other configurations:
+Create a `.env` file and add copy and paste the data in `.env.example` file and your API Keys and other configurations:
 ```
-OPENAI_API_KEY=your_api_key_here
+OPENAI_API_KEY=your_openai_key
+ANTHROPIC_API_KEY=your_anthropic_key
+DEEPSEEK_API_KEY=your_deepseek_key
+KLUSTER_API_KEY=your_kluster_key
 ```
 Getting OpenAI API Key
 1. Go to the OpenAI Platform.
