@@ -60,6 +60,16 @@ Open `http://localhost:8501/` in your browser to start using the chatbot.
 ## 💡 Contributing
 Feel free to submit pull requests or report issues to improve the project!
 
+## 🎥 Screen Record
+Watch a quick screen recording of the chatbot in action:
+
+<video autoplay controls width="100%">
+    <source src="Screenshots/video.webm" type="video/webm">
+    Your browser does not support the video tag.
+</video>
+
+Click the play button above to view the demo directly.
+
 ## Screenshorts
 1. Home Page
 <img width="960" alt="image" src="Screenshots/1.png">
