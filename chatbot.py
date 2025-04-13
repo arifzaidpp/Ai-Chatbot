@@ -56,6 +56,8 @@ if "show_thinking" not in st.session_state:
     st.session_state.show_thinking = True
 if "expanded_thinking" not in st.session_state:
     st.session_state.expanded_thinking = {}
+if "processing_message" not in st.session_state:
+    st.session_state.processing_message = False
 
 # Updated system prompt to include thinking instruction
 system_prompt = """You are a trip planner in Dubai. You're an expert in Dubai Tourism Locations, Food, Events, Hotels, etc. 
@@ -404,6 +406,7 @@ with st.sidebar:
         st.session_state.messages = initial_message
         st.session_state.error_shown = False
         st.session_state.expanded_thinking = {}
+        st.session_state.processing_message = False
         st.rerun()
 
     st.markdown("---")
@@ -463,7 +466,10 @@ with chat_container:
 
 # User input
 user_message = st.chat_input("Type your message here...")
-if user_message:
+if user_message and not st.session_state.processing_message:
+    # Set processing flag to prevent duplicate processing
+    st.session_state.processing_message = True
+    
     # Reset error shown flag when user sends a new message
     st.session_state.error_shown = False
     
@@ -516,6 +522,10 @@ if user_message:
                             if st.button("▼", key=f"toggle_{thinking_id}"):
                                 st.session_state.expanded_thinking[thinking_id] = True
                                 st.rerun()
+                        
+                        # Add the thinking content initially hidden
+                        if st.session_state.expanded_thinking.get(thinking_id, False):
+                            st.code(thinking, language=None)
                 
                 # Show final response
                 st.markdown(final_response)
@@ -523,3 +533,7 @@ if user_message:
             st.session_state.error_shown = True
             with st.chat_message("assistant"):
                 st.markdown(response)
+    
+    # Reset processing flag
+    st.session_state.processing_message = False
+    st.rerun()  # Force refresh to update UI state completely
